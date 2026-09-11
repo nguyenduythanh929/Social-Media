@@ -1,11 +1,45 @@
-# Social Media Platform — Microservices Architecture
+# 📱 Social Media Platform — Microservices Architecture
 
-A social media backend built with Java Spring Boot using a microservice architecture. The system supports user authentication, social profiles, posting, real-time chat, notifications, file uploads, and full-text search.
+A full-stack social media platform built with **Java Spring Boot** (backend) and **React** (frontend) using a microservices architecture. Features real-time chat, user authentication, post creation, file uploads, and full-text search.
+
+**Language Composition:** Java 71.7% | JavaScript 28% | Other 0.3%
 
 ---
 
-## Architecture Overview
+## 🎯 Quick Start
 
+### Prerequisites
+- Java 22
+- Maven 3.9+
+- Node.js 18+
+- Docker & Docker Compose
+- MySQL 8, MongoDB, Neo4j, Elasticsearch (see [Infrastructure](#infrastructure))
+
+### Setup & Run
+
+```bash
+# 1. Start infrastructure services
+docker-compose up -d
+
+# 2. Start backend services (in this order)
+cd identity-service && ./mvnw spring-boot:run &
+cd profile-service && ./mvnw spring-boot:run &
+cd api-gateway && ./mvnw spring-boot:run &
+# Start other services in parallel: post-service, file-service, chat-service, notification-service, search-service
+
+# 3. Start frontend
+cd web-app
+npm install
+npm start
+```
+
+App will be available at **http://localhost:3000**
+
+---
+
+## 🏗️ Architecture Overview
+
+### System Diagram
 ```
 Client (React SPA)
        │
@@ -22,291 +56,262 @@ Identity Profile  Post    File      Chat     Search
 ```
 
 ### Communication Patterns
-- **REST** — synchronous calls between services (via Spring Cloud OpenFeign)
-- **Kafka** — async event-driven: identity → notification (email on register), post/profile → search (index documents)
-- **WebSocket (STOMP)** — real-time chat, client connects directly to chat-service
+| Pattern | Usage | Details |
+|---------|-------|---------|
+| **REST** | Synchronous service-to-service | Spring Cloud OpenFeign |
+| **Kafka** | Async event-driven messaging | Email on register, search indexing |
+| **WebSocket (STOMP)** | Real-time chat | Direct connection to chat-service |
 
-### Persistence (Polyglot)
-| Store | Used By | Reason |
-|---|---|---|
-| MySQL | identity-service | Relational data: users, roles, permissions, token blacklist |
-| Neo4j | profile-service | Graph database for social relationships (friends/followers) |
-| MongoDB | post, chat, file, notification services | Flexible document storage |
-| Elasticsearch | search-service | Full-text search on users and posts |
+### Data Storage (Polyglot Persistence)
+| Database | Service | Use Case |
+|----------|---------|----------|
+| **MySQL** | identity-service | Users, roles, permissions, token blacklist |
+| **Neo4j** | profile-service | Social graph (friends, followers) |
+| **MongoDB** | post, chat, file, notification | Flexible document storage |
+| **Elasticsearch** | search-service | Full-text search on users & posts |
 
 ---
 
-## Services
+## 🔧 Services
 
-### API Gateway — port `8888`
-Single entry point for all HTTP traffic. Routes requests to downstream services and validates JWT tokens.
+### 1. **API Gateway** — Port `8888`
+Single entry point with JWT validation and request routing.
 
-- **Global auth filter:** validates Bearer token by calling the identity-service introspect endpoint
+- **Routes requests** to all downstream services
+- **Validates JWT tokens** via introspect endpoint
 - **Public endpoints** (no auth required):
   - `POST /api/v1/identity/auth/**`
   - `POST /api/v1/identity/users/registration`
-  - `POST /api/v1/notification/email/send`
-  - `GET  /api/v1/file/media/download/**`
-- Returns `{ code: 1407, message: "Unauthenticated" }` with HTTP 401 on invalid/missing token
+  - `GET /api/v1/file/media/download/**`
 
-**Route table:**
-| Prefix | Downstream |
-|---|---|
-| `/api/v1/identity/**` | `localhost:8088` |
-| `/api/v1/profile/users/**` | `localhost:8089` |
-| `/api/v1/notification/**` | `localhost:8090` |
-| `/api/v1/post/**` | `localhost:8091` |
-| `/api/v1/file/**` | `localhost:8092` |
-| `/api/v1/chat/**` | `localhost:8093` |
-| `/api/v1/search/**` | `localhost:8095` |
+**Route Mapping:**
+| Prefix | Target Service |
+|--------|-----------------|
+| `/api/v1/identity/**` | localhost:8088 |
+| `/api/v1/profile/users/**` | localhost:8089 |
+| `/api/v1/post/**` | localhost:8091 |
+| `/api/v1/file/**` | localhost:8092 |
+| `/api/v1/chat/**` | localhost:8093 |
+| `/api/v1/search/**` | localhost:8095 |
 
 ---
 
-### Identity Service — port `8088`
-Handles authentication, authorization, user accounts, roles, and permissions.
+### 2. **Identity Service** — Port `8088`
+Authentication, authorization, and user account management.
 
-**Tech:** Spring Boot, Spring Data JPA, Spring Security, Nimbus JOSE+JWT, Kafka producer, MySQL
+**Stack:** Spring Boot, Spring Security, JWT (Nimbus JOSE), MySQL
 
-**Key APIs:**
+**Key Endpoints:**
 ```
-POST /identity/auth/token          # Login → JWT access token
-POST /identity/auth/introspect     # Validate token (called by gateway)
-POST /identity/auth/refresh        # Refresh access token
-POST /identity/auth/logout         # Invalidate token
+POST   /identity/auth/token          # Login → JWT token
+POST   /identity/auth/introspect     # Token validation
+POST   /identity/auth/refresh        # Refresh token
+POST   /identity/auth/logout         # Logout
 
-POST /identity/users/registration  # Register new user (public)
-GET  /identity/users               # List all users (admin)
-GET  /identity/users/myInfo        # Get current user info
-PUT  /identity/users/{userId}      # Update user
-DELETE /identity/users/{userId}    # Delete user
-
-GET/POST/DELETE /identity/permissions
-GET/POST/DELETE /identity/roles
+POST   /identity/users/registration  # Register (public)
+GET    /identity/users/myInfo        # Get current user
+PUT    /identity/users/{userId}      # Update user
+DELETE /identity/users/{userId}      # Delete user
 ```
 
-**JWT:** HMAC-SHA signed, access token TTL 1h, refresh token TTL 24h
-
-**On registration:** publishes a Kafka event → notification-service sends a welcome email. Also calls profile-service to create the user profile record.
+**Features:**
+- HMAC-SHA signed JWT tokens
+- Access token TTL: 1 hour | Refresh token TTL: 24 hours
+- On registration: publishes Kafka event → triggers welcome email & creates user profile
 
 ---
 
-### Profile Service — port `8089`
-Manages user profiles and social graph relationships stored in Neo4j.
+### 3. **Profile Service** — Port `8089`
+User profiles and social graph management.
 
-**Tech:** Spring Boot, Spring Data Neo4j, Kafka consumer
+**Stack:** Spring Boot, Spring Data Neo4j, Kafka consumer
 
-**Key APIs:**
+**Key Endpoints:**
 ```
-GET  /profile/users/my-profile     # Get authenticated user's profile
-PUT  /profile/users/my-profile     # Update profile
-PUT  /profile/users/avatar         # Upload avatar (multipart)
-GET  /profile/users/{profileId}    # Get profile by ID
-POST /profile/users/search         # Search users by criteria
+GET  /profile/users/my-profile       # Get user's profile
+PUT  /profile/users/my-profile       # Update profile
+PUT  /profile/users/avatar           # Upload avatar
+GET  /profile/users/{profileId}      # Get profile by ID
+POST /profile/users/search           # Search users
 ```
 
 ---
 
-### Post Service — port `8091`
-Manages user posts stored in MongoDB.
+### 4. **Post Service** — Port `8091`
+User posts creation and retrieval.
 
-**Tech:** Spring Boot, Spring Data MongoDB, Kafka producer
+**Stack:** Spring Boot, Spring Data MongoDB, Kafka producer
 
-**Key APIs:**
+**Key Endpoints:**
 ```
-POST /post/create                  # Create a post
-GET  /post/my-posts?page=1&size=10 # Get authenticated user's posts (paginated)
+POST /post/create                    # Create post
+GET  /post/my-posts                  # Get user's posts (paginated)
 ```
 
-Publishes Kafka events on post creation/update → search-service indexes the document.
+- Publishes Kafka events → search-service indexes documents
 
 ---
 
-### File Service — port `8092`
-Handles media file uploads and downloads. Stores metadata in MongoDB, files on disk.
+### 5. **File Service** — Port `8092`
+Media file upload and download management.
 
-**Tech:** Spring Boot, Spring Data MongoDB
+**Stack:** Spring Boot, Spring Data MongoDB
 
-**Key APIs:**
+**Key Endpoints:**
 ```
-POST /file/media/upload            # Upload file (multipart, max 5MB)
-GET  /file/media/download/{name}   # Download file (public, no auth)
+POST /file/media/upload              # Upload file (max 5MB)
+GET  /file/media/download/{name}     # Download file (public)
 ```
 
-Files are stored under the `upload/` directory on the server.
+- Files stored in `upload/` directory
+- Metadata stored in MongoDB
 
 ---
 
-### Chat Service — port `8093`
-Handles real-time 1-on-1 and group messaging using WebSocket (STOMP) backed by MongoDB.
+### 6. **Chat Service** — Port `8093`
+Real-time messaging with WebSocket support.
 
-**Tech:** Spring Boot, Spring Data MongoDB, Spring WebSocket (STOMP), Spring Security (JWT), OpenFeign
+**Stack:** Spring Boot, MongoDB, WebSocket (STOMP), OpenFeign
 
-**REST APIs:**
+**REST Endpoints:**
 ```
-POST /chat/conversations/create           # Create a conversation
-GET  /chat/conversations/my-conversations # List user's conversations
-POST /chat/messages/create               # Send a message
-GET  /chat/messages?conversationId=...   # Get messages in a conversation
+POST /chat/conversations/create           # Create conversation
+GET  /chat/conversations/my-conversations # List conversations
+POST /chat/messages/create                # Send message
+GET  /chat/messages                       # Get conversation history
 ```
 
 **WebSocket:**
-- Endpoint: `ws://localhost:8093/chat/ws`
-- Auth: JWT sent in STOMP `CONNECT` headers
-- Subscribe: `/user/queue/messages` — receives incoming messages in real time
-- Message flow: sender calls REST → saved to MongoDB → pushed via STOMP to all participants
+- **Endpoint:** `ws://localhost:8093/chat/ws`
+- **Auth:** JWT in STOMP CONNECT headers
+- **Subscribe:** `/user/queue/messages` for real-time messages
 
 ---
 
-### Notification Service — port `8090`
-Sends email notifications by consuming Kafka events. Uses Brevo (Sendinblue) email API.
+### 7. **Notification Service** — Port `8090`
+Email notifications via Kafka events and Brevo API.
 
-**Tech:** Spring Boot, Spring Kafka consumer, Spring Data MongoDB, Brevo API
+**Stack:** Spring Boot, Spring Kafka, Brevo API
 
-**Kafka topic:** `notification-delivery`
-
-**REST API:**
+**Key Endpoint:**
 ```
-POST /notification/email/send      # Send email directly (public endpoint)
+POST /notification/email/send        # Send email directly (public)
 ```
 
 ---
 
-### Search Service — port `8095`
-Provides full-text search over users and posts using Elasticsearch.
+### 8. **Search Service** — Port `8095`
+Full-text search for users and posts.
 
-**Tech:** Spring Boot, Spring Data Elasticsearch, Kafka consumer, Spring Security (JWT)
+**Stack:** Spring Boot, Elasticsearch, Kafka consumer
 
-**Kafka:** Consumes events from post-service and profile-service to index documents.
-
-**Key APIs:**
+**Key Endpoints:**
 ```
-GET /search/users?q={keyword}      # Search users
-GET /search/posts?q={keyword}      # Search posts
+GET /search/users?q={keyword}        # Search users
+GET /search/posts?q={keyword}        # Search posts
 ```
 
 ---
 
-### Web App (React SPA)
-Frontend single-page application.
+### 9. **Web App** — Port `3000`
+React SPA frontend.
 
-**Tech:** React, React Router, Material UI, `@stomp/stompjs`
+**Stack:** React, React Router, Material UI, STOMP.js
 
-**Pages:** Login, Home (feed), Profile, Chat, Search
-
-**Connects to:**
-- API Gateway: `http://localhost:8888/api/v1`
-- Chat WebSocket (direct): `ws://localhost:8093/chat/ws`
+**Features:** Login, Home Feed, Profile, Chat, Search
 
 ---
 
-## Tech Stack Summary
+## 💻 Tech Stack
 
 | Layer | Technology |
-|---|---|
-| Language | Java 22 |
-| Framework | Spring Boot 4.0.6 |
-| API Gateway | Spring Cloud Gateway (WebFlux) |
-| Security | Spring Security, JWT (Nimbus JOSE) |
-| ORM | Spring Data JPA (Hibernate), Spring Data MongoDB, Spring Data Neo4j |
-| Search | Spring Data Elasticsearch |
-| Messaging | Apache Kafka (KRaft mode) |
-| Real-time | WebSocket (STOMP) |
-| HTTP Client | Spring Cloud OpenFeign, WebClient |
-| Build | Maven |
-| Frontend | React, Material UI |
+|-------|------------|
+| **Language** | Java 22, JavaScript/React |
+| **Framework** | Spring Boot 4.0.6 |
+| **Gateway** | Spring Cloud Gateway (WebFlux) |
+| **Security** | Spring Security, JWT |
+| **Persistence** | JPA/Hibernate, MongoDB, Neo4j |
+| **Search** | Elasticsearch |
+| **Messaging** | Apache Kafka (KRaft mode) |
+| **Real-time** | WebSocket (STOMP) |
+| **HTTP Client** | Spring Cloud OpenFeign, WebClient |
+| **Build** | Maven |
+| **Frontend** | React, Material UI |
 
 ---
 
-## Infrastructure
+## 🚀 Infrastructure
 
-All infrastructure services run on `192.168.0.111`.
+All services run on `192.168.0.111`
 
-| Service | Port | Notes |
-|---|---|---|
-| MySQL | 3308 | identity-service database |
-| MongoDB | 27017 | post, chat, file, notification, search services |
-| Neo4j | 7687 | profile-service (social graph) |
-| Elasticsearch | 9200 | search-service |
-| Kafka | 9094 (external), 9092 (internal) | KRaft mode, 3 partitions |
+| Service | Port | Purpose |
+|---------|------|---------|
+| **MySQL** | 3308 | identity-service database |
+| **MongoDB** | 27017 | post, chat, file, notification, search services |
+| **Neo4j** | 7687 | profile-service social graph |
+| **Elasticsearch** | 9200 | search-service indexing |
+| **Kafka** | 9094 (ext), 9092 (int) | Message broker (KRaft, 3 partitions) |
 
-### Start Kafka with Docker Compose
+### Start Infrastructure
 ```bash
 docker-compose up -d
 ```
 
 ---
 
-## Local Development Setup
-
-### Prerequisites
-- Java 22
-- Maven 3.9+
-- Node.js 18+
-- MySQL 8, MongoDB, Neo4j, Elasticsearch running (see Infrastructure above)
-- Docker (for Kafka)
-
-### 1. Start Infrastructure
-```bash
-docker-compose up -d
-```
-
-### 2. Start Backend Services
-Run each service in order. Identity must start before others since it issues tokens.
-
-```bash
-# From each service directory:
-./mvnw spring-boot:run
-```
-
-Start order recommendation:
-1. `identity-service`
-2. `profile-service`
-3. `post-service`, `file-service`, `notification-service`, `search-service`
-4. `chat-service`
-5. `api-gateway`
-
-### 3. Start Frontend
-```bash
-cd web-app
-npm install
-npm start
-```
-
-App will be available at `http://localhost:3000`
-
----
-
-## Environment Variables
-
-| Variable | Service | Description |
-|---|---|---|
-| `SENDINBLUE_API_KEY` | notification-service | Brevo email API key |
-
-> **Note:** The JWT signing key and database credentials in `application.yaml` files are for local development only. Replace them with environment variables before deploying to any shared or production environment.
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 social-media/
-├── api-gateway/          # Spring Cloud Gateway — routing & auth
-├── identity-service/     # Auth, users, roles, permissions (MySQL)
-├── profile-service/      # User profiles, social graph (Neo4j)
-├── post-service/         # Posts (MongoDB + Kafka)
-├── file-service/         # Media upload/download (MongoDB + disk)
-├── chat-service/         # Real-time chat (MongoDB + WebSocket)
-├── notification-service/ # Email notifications (Kafka consumer + Brevo)
-├── search-service/       # Full-text search (Elasticsearch + Kafka)
-├── web-app/              # React SPA frontend
-├── upload/               # Local media file storage
-└── docker-compose.yml    # Kafka infrastructure
+├── api-gateway/              # Spring Cloud Gateway
+├── identity-service/         # Auth & user management (MySQL)
+├── profile-service/          # Profiles & social graph (Neo4j)
+├── post-service/             # Posts (MongoDB + Kafka)
+├── file-service/             # Media management (MongoDB + disk)
+├── chat-service/             # Real-time chat (MongoDB + WebSocket)
+├── notification-service/     # Email notifications (Kafka + Brevo)
+├── search-service/           # Full-text search (Elasticsearch + Kafka)
+├── web-app/                  # React frontend
+├── upload/                   # Local file storage
+└── docker-compose.yml        # Infrastructure config
 ```
 
 ---
 
-## Author
+## ⚙️ Environment Variables
+
+| Variable | Service | Description |
+|----------|---------|-------------|
+| `SENDINBLUE_API_KEY` | notification-service | Brevo email API key |
+
+> **⚠️ Security Note:** Development credentials in `application.yaml` are for local use only. Use environment variables for production deployments.
+
+---
+
+## 📋 Service Start Order
+
+1. **identity-service** (required first - issues tokens)
+2. **profile-service** (dependency on identity)
+3. **post-service**, **file-service**, **notification-service**, **search-service** (parallel)
+4. **chat-service**
+5. **api-gateway** (last - routes to all services)
+
+---
+
+## 📝 License
+
+This project is part of a microservices learning platform.
+
+---
+
+## 👤 Author
 
 **Nguyễn Duy Thành** — Java Backend Developer  
 📧 tnguyenduy587@gmail.com  
 🔗 [github.com/nguyenduythanh929](https://github.com/nguyenduythanh929)
+
+---
+
+## 🤝 Support
+
+For issues, questions, or contributions, please open an issue on [GitHub Issues](https://github.com/nguyenduythanh929/Social-Media/issues).
