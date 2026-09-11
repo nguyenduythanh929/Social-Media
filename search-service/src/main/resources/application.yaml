@@ -1,0 +1,20 @@
+server:
+  port: 8095
+  servlet:
+    context-path: /search
+
+spring:
+  application:
+    name: search-service
+
+  elasticsearch:
+    Uris: http://192.168.0.111:9200
+
+  kafka:
+    bootstrap-servers: 192.168.0.111:9094
+    consumer:
+      group-id: search-group
+      auto-offset-reset: earliest
+
+jwt:
+  signerKey: "1TjXchw5FloESb63Kc+DFhTARvpWL4jUGCwfGWxuG5SIf/1y/LgJxHnMqaF6A/ij"

@@ -1,0 +1,4 @@
+jwt:
+  signerKey: "+hQHK/3tubw9dr8hxziOE0W1TaNyfHpUr0SUkvznZ0I="
+  valid-duration: 7200 # in second
+  refreshable-duration: 72000 # in second
