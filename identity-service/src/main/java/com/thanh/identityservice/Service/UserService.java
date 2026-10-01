@@ -74,7 +74,7 @@ public class UserService {
         NotificationEvent notificationEvent = NotificationEvent.builder()
                 .channel("EMAIL")
                 .recipient(request.getEmail())
-                .subject("Welcome to bookteria")
+                .subject("Welcome to Social Media App")
                 .body("Hello, " + user.getUsername())
                 .build();
 

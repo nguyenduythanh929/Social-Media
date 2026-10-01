@@ -1,317 +1,295 @@
-# 📱 Social Media Platform — Microservices Architecture
+# Social Media App — Microservices Architecture
 
-A full-stack social media platform built with **Java Spring Boot** (backend) and **React** (frontend) using a microservices architecture. Features real-time chat, user authentication, post creation, file uploads, and full-text search.
+A full-stack social media platform built with **Java Spring Boot** microservices and a **React** frontend.
+Users can sign up, follow each other, share posts with images, like and comment, chat in real time, and search people and posts.
 
-**Language Composition:** Java 71.7% | JavaScript 28% | Other 0.3%
+The whole stack — 8 services, the web app, and MySQL, MongoDB, Neo4j, Elasticsearch and Kafka — starts with **one Docker Compose command**.
 
 ---
 
-## 🎯 Quick Start
+## Features
 
-### Prerequisites
-- Java 22
-- Maven 3.9+
-- Node.js 18+
-- Docker & Docker Compose
-- MySQL 8, MongoDB, Neo4j, Elasticsearch (see [Infrastructure](#infrastructure))
+| Area | What users can do |
+|---|---|
+| **Accounts** | Sign up and log in with JWT, welcome email on registration (the API also supports token refresh and server-side logout via a token blacklist) |
+| **Profiles** | Edit profile and avatar, view any user's profile with follower / following counts |
+| **Social graph** | Follow / unfollow, see followers, following and **friends** (mutual follows) |
+| **News feed** | Paginated feed of your own posts and posts from people you follow |
+| **Posts** | Create posts with text and up to 4 images, edit and delete your own posts |
+| **Interactions** | Like / unlike posts, comment, delete your comments (post owners can moderate comments on their posts) |
+| **Chat** | Real-time 1-on-1 and group messaging over WebSocket (STOMP) |
+| **Search** | Full-text, typo-tolerant search over users and posts, kept in sync when posts are edited or deleted |
 
-### Setup & Run
+---
+
+## Quick Start (Docker)
+
+**Requirements:** Docker with Docker Compose, and about **8 GB of RAM** free for the containers.
 
 ```bash
-# 1. Start infrastructure services
-docker-compose up -d
-
-# 2. Start backend services (in this order)
-cd identity-service && ./mvnw spring-boot:run &
-cd profile-service && ./mvnw spring-boot:run &
-cd api-gateway && ./mvnw spring-boot:run &
-# Start other services in parallel: post-service, file-service, chat-service, notification-service, search-service
-
-# 3. Start frontend
-cd web-app
-npm install
-npm start
+git clone https://github.com/nguyenduythanh929/Social-Media.git
+cd Social-Media
+cp .env.example .env        # then set JWT_SIGNER_KEY and SENDINBLUE_API_KEY
+docker compose up -d --build
 ```
 
-App will be available at **http://localhost:3000**
+Open **http://localhost:3000** (or `http://<server-ip>:3000` when running on another machine).
+The first build takes 10–20 minutes while Maven and npm download dependencies.
+
+```bash
+docker compose ps                         # check every container is running
+docker compose logs -f identity-service   # follow one service's logs
+docker compose down                       # stop (add -v to also delete all data)
+```
+
+> **Linux hosts:** Elasticsearch needs `sudo sysctl -w vm.max_map_count=262144`
+> (persist it in `/etc/sysctl.d/` to survive reboots).
+
+### Configuration (`.env`)
+
+All settings live in `.env`; nothing machine-specific is hard-coded in the repository.
+
+| Variable | Purpose |
+|---|---|
+| `MYSQL_ROOT_PASSWORD`, `MONGO_PASSWORD`, `NEO4J_PASSWORD` | Database passwords |
+| `JWT_SIGNER_KEY` | Secret used to sign JWTs (at least 64 bytes; generate with `openssl rand -base64 64`) |
+| `SENDINBLUE_API_KEY` | [Brevo](https://www.brevo.com/) API key for emails |
+| `ELASTIC_VERSION` | Elasticsearch image version (matches the Spring Boot client, `9.2.8`) |
+| `WEB_PORT` | Port the web app is published on (default `3000`) |
+| `KAFKA_EXTERNAL_HOST` | Address Kafka advertises to clients **outside** Docker (see [Local development](#local-development-ide)) |
+
+`.env` is git-ignored; `.env.example` documents every variable.
 
 ---
 
-## 🏗️ Architecture Overview
+## Architecture
 
-### System Diagram
 ```
-Client (React SPA)
-       │
-       ▼
-  API Gateway :8888          ← Single entry point, JWT validation
-       │
-  ┌────┼────────────────────────────────────────┐
-  ▼    ▼         ▼          ▼         ▼         ▼
-Identity Profile  Post    File      Chat     Search
- :8088   :8089   :8091   :8092     :8093     :8095
-  │                │                           ▲
-  └──── Kafka ─────┘──── Notification :8090    │
-                    └────────────────────────── ┘
+                      Browser
+                         │  http://<host>:3000
+                         ▼
+          ┌───────────────────────────────┐
+          │  web-app (nginx + React SPA)  │
+          └──────┬─────────────────┬──────┘
+           /api/*│                 │/chat/ws (WebSocket)
+                 ▼                 │
+        ┌─────────────────┐        │
+        │  API Gateway    │  JWT   │
+        │  :8888          │  check │
+        └───────┬─────────┘        │
+   ┌────────┬───┴────┬────────┬────┼─────────┬──────────┐
+   ▼        ▼        ▼        ▼    ▼         ▼          ▼
+Identity  Profile   Post     File  Chat    Search   Notification
+ :8088     :8089    :8091   :8092  :8093    :8095     :8090
+ MySQL     Neo4j    MongoDB MongoDB MongoDB Elastic-  MongoDB
+                                            search
+   │          │        │                      ▲          ▲
+   └──────────┴────────┴──── Kafka ───────────┴──────────┘
 ```
 
-### Communication Patterns
-| Pattern | Usage | Details |
-|---------|-------|---------|
-| **REST** | Synchronous service-to-service | Spring Cloud OpenFeign |
-| **Kafka** | Async event-driven messaging | Email on register, search indexing |
-| **WebSocket (STOMP)** | Real-time chat | Direct connection to chat-service |
+- **nginx** serves the React app and proxies `/api/*` to the gateway and `/chat/ws` to chat-service, so the browser only ever talks to one origin. The frontend uses relative URLs and works on any host without rebuilding.
+- **API Gateway** is the single entry point for REST traffic. A global filter validates every Bearer token through identity-service's introspect endpoint before routing.
+- Only `web-app` (3000) and `api-gateway` (8888) are published to the host; the services talk to each other by container name on the Docker network.
 
-### Data Storage (Polyglot Persistence)
-| Database | Service | Use Case |
-|----------|---------|----------|
-| **MySQL** | identity-service | Users, roles, permissions, token blacklist |
-| **Neo4j** | profile-service | Social graph (friends, followers) |
-| **MongoDB** | post, chat, file, notification | Flexible document storage |
-| **Elasticsearch** | search-service | Full-text search on users & posts |
+### Communication patterns
+
+| Pattern | Used for |
+|---|---|
+| **REST (OpenFeign)** | Synchronous calls, e.g. identity → profile on sign-up, post → profile for authors and the follow list |
+| **Kafka** | Asynchronous events: welcome emails and search indexing |
+| **WebSocket (STOMP)** | Real-time chat delivery to each participant's private queue |
+
+**Kafka topics**
+
+| Topic | Producer | Consumer | Purpose |
+|---|---|---|---|
+| `notification-delivery` | identity | notification | Send welcome email |
+| `user-created` | identity | search | Index new user |
+| `profile-updated` | profile | search | Re-index user |
+| `post-created` / `post-updated` | post | search | Index / re-index post |
+| `post-deleted` | post | search | Remove post from index |
+
+### Polyglot persistence
+
+| Store | Service | Why |
+|---|---|---|
+| **MySQL** | identity | Relational data: users, roles, permissions, token blacklist |
+| **Neo4j** | profile | Social graph: `(:user_profile)-[:FOLLOWS]->(:user_profile)` relationships power followers, following and mutual-follow friends |
+| **MongoDB** | post, chat, file, notification | Flexible documents: posts, comments, messages, file metadata |
+| **Elasticsearch** | search | Full-text, fuzzy search over users and posts |
+
+### Notable design decisions
+
+- **Feed (fan-out on read):** the feed is built per request from the user's follow list (Neo4j) and a paginated MongoDB query, with author details fetched in **one batch call per page**. If profile-service is unavailable the feed degrades to the user's own posts instead of failing.
+- **Race-free likes and counters:** likes use MongoDB `$addToSet` / `$pull` and comment counts use `$inc`, so double clicks and concurrent requests never duplicate or lose updates. Post edits update only content fields, so they never overwrite concurrent likes.
+- **Follow edges via Cypher:** relationships are written with explicit Cypher queries rather than an entity field, so saving a profile can never rewrite or drop its follow edges.
+- **Safe uploads:** file-service only accepts JPEG, PNG, GIF and WebP and serves files with `X-Content-Type-Options: nosniff`, so an uploaded HTML/SVG file cannot run scripts on the site's origin. Posts only accept image URLs issued by our own file-service.
+- **Ownership checks:** only a post's author can edit or delete it; comments can be removed by their author or the post owner.
 
 ---
 
-## 🔧 Services
+## Services
 
-### 1. **API Gateway** — Port `8888`
-Single entry point with JWT validation and request routing.
+| Service | Port | Responsibility |
+|---|---|---|
+| **api-gateway** | 8888 | Routing and JWT validation (Spring Cloud Gateway, WebFlux) |
+| **identity-service** | 8088 | Registration, login, refresh, logout, roles and permissions |
+| **profile-service** | 8089 | Profiles, avatars, follow graph |
+| **post-service** | 8091 | Posts, images, feed, likes, comments |
+| **file-service** | 8092 | Image upload and download |
+| **chat-service** | 8093 | Conversations and real-time messages |
+| **notification-service** | 8090 | Emails via Brevo, triggered by Kafka events |
+| **search-service** | 8095 | User and post search (Elasticsearch) |
+| **web-app** | 3000 | React SPA served by nginx |
 
-- **Routes requests** to all downstream services
-- **Validates JWT tokens** via introspect endpoint
-- **Public endpoints** (no auth required):
-  - `POST /api/v1/identity/auth/**`
-  - `POST /api/v1/identity/users/registration`
-  - `GET /api/v1/file/media/download/**`
+All REST endpoints are reached through the gateway at `/api/v1/<service>/...`.
 
-**Route Mapping:**
-| Prefix | Target Service |
-|--------|-----------------|
-| `/api/v1/identity/**` | localhost:8088 |
-| `/api/v1/profile/users/**` | localhost:8089 |
-| `/api/v1/post/**` | localhost:8091 |
-| `/api/v1/file/**` | localhost:8092 |
-| `/api/v1/chat/**` | localhost:8093 |
-| `/api/v1/search/**` | localhost:8095 |
+<details>
+<summary><b>API reference</b></summary>
+
+**Public endpoints** (no token required): `/identity/auth/**`, `POST /identity/users/registration`, `POST /notification/email/send`, `GET /file/media/download/**`.
+
+**Identity** — `/api/v1/identity`
+```
+POST   /auth/token                  Log in → access token
+POST   /auth/refresh                Refresh access token
+POST   /auth/logout                 Invalidate token
+POST   /auth/introspect             Validate token (used by the gateway)
+POST   /users/registration          Sign up
+GET    /users/myInfo                Current user
+GET    /users, PUT/DELETE /users/{userId}   Admin only
+GET|POST|DELETE /roles, /permissions        Admin only
+```
+
+**Profile** — `/api/v1/profile`
+```
+GET    /users/my-profile            My profile
+PUT    /users/my-profile            Update my profile
+PUT    /users/avatar                Upload avatar (multipart)
+GET    /users/{userId}/detail       Profile + follower/following counts + followedByMe
+POST   /users/{userId}/follow       Follow
+DELETE /users/{userId}/follow       Unfollow
+GET    /users/{userId}/followers    Followers
+GET    /users/{userId}/following    Following
+GET    /users/{userId}/friends      Mutual follows
+```
+
+**Post** — `/api/v1/post`
+```
+POST   /create                      Create post { content, mediaUrls[] }
+GET    /feed?page=&size=            News feed
+GET    /my-posts?page=&size=        My posts
+GET    /users/{userId}?page=&size=  A user's posts
+PUT    /{postId}                    Edit own post
+DELETE /{postId}                    Delete own post (and its comments)
+POST   /{postId}/like               Like
+DELETE /{postId}/like               Unlike
+GET    /{postId}/comments           Comments (paginated)
+POST   /{postId}/comments           Add comment
+DELETE /comments/{commentId}        Delete comment (author or post owner)
+```
+
+**File** — `/api/v1/file`
+```
+POST   /media/upload                Upload image (JPEG/PNG/GIF/WebP, max 5 MB)
+GET    /media/download/{fileName}   Download (public)
+```
+
+**Chat** — `/api/v1/chat`, WebSocket at `/chat/ws`
+```
+POST   /conversations/create        Create conversation
+GET    /conversations/my-conversations
+POST   /messages/create             Send message (saved, then pushed over STOMP)
+GET    /messages?conversationId=    Message history
+```
+WebSocket: send the JWT in the STOMP `CONNECT` headers and subscribe to `/user/queue/messages`.
+
+**Search** — `/api/v1/search`
+```
+GET    /users?q={keyword}           Search users
+GET    /posts?q={keyword}           Search posts
+```
+
+</details>
 
 ---
 
-### 2. **Identity Service** — Port `8088`
-Authentication, authorization, and user account management.
+## Local development (IDE)
 
-**Stack:** Spring Boot, Spring Security, JWT (Nimbus JOSE), MySQL
+You can run the infrastructure in Docker and the services from IntelliJ for debugging.
 
-**Key Endpoints:**
-```
-POST   /identity/auth/token          # Login → JWT token
-POST   /identity/auth/introspect     # Token validation
-POST   /identity/auth/refresh        # Refresh token
-POST   /identity/auth/logout         # Logout
+1. Start only the infrastructure:
+   ```bash
+   docker compose up -d mysql mongo neo4j elasticsearch kafka
+   ```
+2. Set these environment variables in each IntelliJ run configuration:
 
-POST   /identity/users/registration  # Register (public)
-GET    /identity/users/myInfo        # Get current user
-PUT    /identity/users/{userId}      # Update user
-DELETE /identity/users/{userId}      # Delete user
-```
+   | Variable | Value |
+   |---|---|
+   | `INFRA_HOST` | Host running the containers (`localhost`, or the server's IP / hostname) |
+   | `JWT_SIGNER_KEY` | Same key as in `.env` (identity-service and search-service) |
+   | `SENDINBLUE_API_KEY` | Your Brevo key (notification-service) |
 
-**Features:**
-- HMAC-SHA signed JWT tokens
-- Access token TTL: 1 hour | Refresh token TTL: 24 hours
-- On registration: publishes Kafka event → triggers welcome email & creates user profile
+   If the containers run on **another machine**, also set `KAFKA_EXTERNAL_HOST` in that machine's `.env` to its IP and run `docker compose up -d kafka`, so Kafka advertises an address your IDE can reach.
+3. Start the services: identity → profile → post, file, notification, search → chat → api-gateway.
+4. Start the frontend (it reads `web-app/.env.development` and talks to `localhost:8888` directly):
+   ```bash
+   cd web-app
+   npm install
+   npm start
+   ```
 
----
-
-### 3. **Profile Service** — Port `8089`
-User profiles and social graph management.
-
-**Stack:** Spring Boot, Spring Data Neo4j, Kafka consumer
-
-**Key Endpoints:**
-```
-GET  /profile/users/my-profile       # Get user's profile
-PUT  /profile/users/my-profile       # Update profile
-PUT  /profile/users/avatar           # Upload avatar
-GET  /profile/users/{profileId}      # Get profile by ID
-POST /profile/users/search           # Search users
-```
+**How configuration works:** every `application.yaml` uses `localhost` defaults (for the IDE), written as placeholders such as `${INFRA_HOST:localhost}`. In Docker, `docker-compose.yml` overrides them with environment variables that point at container names (`SPRING_DATASOURCE_URL`, `APP_SERVICES_PROFILE_URL`, …). When adding a new service-to-service call, add both the YAML default and the Compose override.
 
 ---
 
-### 4. **Post Service** — Port `8091`
-User posts creation and retrieval.
+## Testing
 
-**Stack:** Spring Boot, Spring Data MongoDB, Kafka producer
-
-**Key Endpoints:**
-```
-POST /post/create                    # Create post
-GET  /post/my-posts                  # Get user's posts (paginated)
+```bash
+cd identity-service
+mvn verify
 ```
 
-- Publishes Kafka events → search-service indexes documents
+identity-service has unit and web-layer tests (service logic, request validation, context startup) that mock the database, profile-service and Kafka, so they run without any infrastructure. Spotless formats the code during the build.
 
 ---
 
-### 5. **File Service** — Port `8092`
-Media file upload and download management.
-
-**Stack:** Spring Boot, Spring Data MongoDB
-
-**Key Endpoints:**
-```
-POST /file/media/upload              # Upload file (max 5MB)
-GET  /file/media/download/{name}     # Download file (public)
-```
-
-- Files stored in `upload/` directory
-- Metadata stored in MongoDB
-
----
-
-### 6. **Chat Service** — Port `8093`
-Real-time messaging with WebSocket support.
-
-**Stack:** Spring Boot, MongoDB, WebSocket (STOMP), OpenFeign
-
-**REST Endpoints:**
-```
-POST /chat/conversations/create           # Create conversation
-GET  /chat/conversations/my-conversations # List conversations
-POST /chat/messages/create                # Send message
-GET  /chat/messages                       # Get conversation history
-```
-
-**WebSocket:**
-- **Endpoint:** `ws://localhost:8093/chat/ws`
-- **Auth:** JWT in STOMP CONNECT headers
-- **Subscribe:** `/user/queue/messages` for real-time messages
-
----
-
-### 7. **Notification Service** — Port `8090`
-Email notifications via Kafka events and Brevo API.
-
-**Stack:** Spring Boot, Spring Kafka, Brevo API
-
-**Key Endpoint:**
-```
-POST /notification/email/send        # Send email directly (public)
-```
-
----
-
-### 8. **Search Service** — Port `8095`
-Full-text search for users and posts.
-
-**Stack:** Spring Boot, Elasticsearch, Kafka consumer
-
-**Key Endpoints:**
-```
-GET /search/users?q={keyword}        # Search users
-GET /search/posts?q={keyword}        # Search posts
-```
-
----
-
-### 9. **Web App** — Port `3000`
-React SPA frontend.
-
-**Stack:** React, React Router, Material UI, STOMP.js
-
-**Features:** Login, Home Feed, Profile, Chat, Search
-
----
-
-## 💻 Tech Stack
+## Tech stack
 
 | Layer | Technology |
-|-------|------------|
-| **Language** | Java 22, JavaScript/React |
-| **Framework** | Spring Boot 4.0.6 |
-| **Gateway** | Spring Cloud Gateway (WebFlux) |
-| **Security** | Spring Security, JWT |
-| **Persistence** | JPA/Hibernate, MongoDB, Neo4j |
-| **Search** | Elasticsearch |
-| **Messaging** | Apache Kafka (KRaft mode) |
-| **Real-time** | WebSocket (STOMP) |
-| **HTTP Client** | Spring Cloud OpenFeign, WebClient |
-| **Build** | Maven |
-| **Frontend** | React, Material UI |
+|---|---|
+| Language | Java 22, JavaScript |
+| Backend | Spring Boot 4, Spring Security (OAuth2 resource server), Spring Cloud Gateway, OpenFeign |
+| Data | Spring Data JPA (MySQL), Spring Data MongoDB, Spring Data Neo4j, Spring Data Elasticsearch |
+| Messaging | Apache Kafka (KRaft mode) |
+| Real time | WebSocket (STOMP) |
+| Frontend | React 18, React Router, Material UI, STOMP.js, Axios |
+| Build & quality | Maven, MapStruct, Lombok, Spotless, JaCoCo, JUnit 5, Mockito |
+| Infrastructure | Docker, Docker Compose, nginx |
 
 ---
 
-## 🚀 Infrastructure
-
-All services run on `192.168.0.111`
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| **MySQL** | 3308 | identity-service database |
-| **MongoDB** | 27017 | post, chat, file, notification, search services |
-| **Neo4j** | 7687 | profile-service social graph |
-| **Elasticsearch** | 9200 | search-service indexing |
-| **Kafka** | 9094 (ext), 9092 (int) | Message broker (KRaft, 3 partitions) |
-
-### Start Infrastructure
-```bash
-docker-compose up -d
-```
-
----
-
-## 📁 Project Structure
+## Project structure
 
 ```
 social-media/
-├── api-gateway/              # Spring Cloud Gateway
-├── identity-service/         # Auth & user management (MySQL)
-├── profile-service/          # Profiles & social graph (Neo4j)
-├── post-service/             # Posts (MongoDB + Kafka)
-├── file-service/             # Media management (MongoDB + disk)
-├── chat-service/             # Real-time chat (MongoDB + WebSocket)
-├── notification-service/     # Email notifications (Kafka + Brevo)
-├── search-service/           # Full-text search (Elasticsearch + Kafka)
-├── web-app/                  # React frontend
-├── upload/                   # Local file storage
-└── docker-compose.yml        # Infrastructure config
+├── api-gateway/            # Spring Cloud Gateway: routing + JWT check
+├── identity-service/       # Auth, users, roles (MySQL)
+├── profile-service/        # Profiles + follow graph (Neo4j)
+├── post-service/           # Posts, feed, likes, comments (MongoDB)
+├── file-service/           # Image upload/download (MongoDB metadata + volume)
+├── chat-service/           # Real-time chat (MongoDB + WebSocket)
+├── notification-service/   # Emails (Kafka consumer + Brevo)
+├── search-service/         # Search (Elasticsearch + Kafka consumer)
+├── web-app/                # React SPA + nginx config
+├── docker-compose.yml      # Full stack: services + infrastructure
+└── .env.example            # Configuration template
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## Author
 
-| Variable | Service | Description |
-|----------|---------|-------------|
-| `SENDINBLUE_API_KEY` | notification-service | Brevo email API key |
-
-> **⚠️ Security Note:** Development credentials in `application.yaml` are for local use only. Use environment variables for production deployments.
-
----
-
-## 📋 Service Start Order
-
-1. **identity-service** (required first - issues tokens)
-2. **profile-service** (dependency on identity)
-3. **post-service**, **file-service**, **notification-service**, **search-service** (parallel)
-4. **chat-service**
-5. **api-gateway** (last - routes to all services)
-
----
-
-## 📝 License
-
-This project is part of a microservices learning platform.
-
----
-
-## 👤 Author
-
-**Nguyễn Duy Thành** — Java Backend Developer  
-📧 tnguyenduy587@gmail.com  
+**Nguyễn Duy Thành** — Java Backend Developer
+📧 tnguyenduy587@gmail.com
 🔗 [github.com/nguyenduythanh929](https://github.com/nguyenduythanh929)
-
----
-
-## 🤝 Support
-
-For issues, questions, or contributions, please open an issue on [GitHub Issues](https://github.com/nguyenduythanh929/Social-Media/issues).
