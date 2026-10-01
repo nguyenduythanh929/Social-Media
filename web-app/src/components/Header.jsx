@@ -182,14 +182,19 @@ export default function Header() {
         sx={{ mr: 2 }}
         onClick={() => (window.location.href = "/")}
       >
+        {/* White tile keeps the logo's cyan tips visible on the blue app bar */}
         <Box
           component={"img"}
-          style={{
+          src="/logo/app-logo.svg"
+          alt="Home"
+          sx={{
             width: "35px",
             height: "35px",
-            borderRadius: 6,
+            borderRadius: "6px",
+            bgcolor: "white",
+            p: "3px",
+            boxSizing: "border-box",
           }}
-          src="/logo/devteria-logo.png"
         ></Box>
       </IconButton>
       <Search>

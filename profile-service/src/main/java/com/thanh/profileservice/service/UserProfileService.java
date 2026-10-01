@@ -42,15 +42,17 @@ public class UserProfileService {
         userProfile = userProfileRepository.save(userProfile);
 
         // Publish event for search indexing
-        kafkaTemplate.send("profile-updated", ProfileUpdatedEvent.builder()
-                .userId(userProfile.getUserId())
-                .username(userProfile.getUsername())
-                .firstName(userProfile.getFirstName())
-                .lastName(userProfile.getLastName())
-                .avatar(userProfile.getAvatar())
-                .city(userProfile.getCity())
-                .dob(userProfile.getDob())
-                .build());
+        kafkaTemplate.send(
+                "profile-updated",
+                ProfileUpdatedEvent.builder()
+                        .userId(userProfile.getUserId())
+                        .username(userProfile.getUsername())
+                        .firstName(userProfile.getFirstName())
+                        .lastName(userProfile.getLastName())
+                        .avatar(userProfile.getAvatar())
+                        .city(userProfile.getCity())
+                        .dob(userProfile.getDob())
+                        .build());
 
         return userProfileMapper.toUserProfileResponse(userProfile);
     }
@@ -69,6 +71,14 @@ public class UserProfileService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         return userProfileMapper.toUserProfileResponse(userProfile);
+    }
+
+    public List<UserProfileResponse> getByUserIds(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) return List.of();
+
+        return userProfileRepository.findAllByUserIdIn(userIds).stream()
+                .map(userProfileMapper::toUserProfileResponse)
+                .toList();
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -106,15 +116,17 @@ public class UserProfileService {
         UserProfileResponse updated = userProfileMapper.toUserProfileResponse(userProfileRepository.save(profile));
 
         // Publish event for search indexing
-        kafkaTemplate.send("profile-updated", ProfileUpdatedEvent.builder()
-                .userId(profile.getUserId())
-                .username(profile.getUsername())
-                .firstName(profile.getFirstName())
-                .lastName(profile.getLastName())
-                .avatar(profile.getAvatar())
-                .city(profile.getCity())
-                .dob(profile.getDob())
-                .build());
+        kafkaTemplate.send(
+                "profile-updated",
+                ProfileUpdatedEvent.builder()
+                        .userId(profile.getUserId())
+                        .username(profile.getUsername())
+                        .firstName(profile.getFirstName())
+                        .lastName(profile.getLastName())
+                        .avatar(profile.getAvatar())
+                        .city(profile.getCity())
+                        .dob(profile.getDob())
+                        .build());
 
         return updated;
     }

@@ -4,12 +4,12 @@ server:
     context-path: /profile
 spring:
   neo4j:
-    uri: bolt://192.168.0.111:7687
+    uri: bolt://${INFRA_HOST:localhost}:7687
     authentication:
       username: neo4j
-      password: spring+neo4j
+      password: ${NEO4J_PASSWORD:spring+neo4j}
   kafka:
-    bootstrap-servers: 192.168.0.111:9094
+    bootstrap-servers: ${INFRA_HOST:localhost}:9094
 
 app:
   services:

@@ -30,7 +30,7 @@ function SideMenu() {
           </ListItemButton>
         </ListItem>
         <ListItem key={"friends"} disablePadding>
-          <ListItemButton>
+          <ListItemButton component={Link} to="/friends">
             <ListItemIcon>
               <PeopleIcon />
             </ListItemIcon>

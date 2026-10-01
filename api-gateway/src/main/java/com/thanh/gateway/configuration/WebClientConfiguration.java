@@ -1,6 +1,7 @@
 package com.thanh.gateway.configuration;
 
 import com.thanh.gateway.repository.IdentityClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -16,9 +17,9 @@ import java.util.List;
 public class WebClientConfiguration {
 
     @Bean
-    WebClient webClient(){
+    WebClient webClient(@Value("${app.services.identity}") String identityUrl){
         return WebClient.builder()
-                .baseUrl("http://localhost:8088/identity")
+                .baseUrl(identityUrl)
                 .build();
     }
 

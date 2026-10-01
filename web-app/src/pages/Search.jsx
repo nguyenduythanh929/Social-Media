@@ -8,7 +8,7 @@ import {
   Tabs,
   Tab,
   List,
-  ListItem,
+  ListItemButton,
   ListItemAvatar,
   Avatar,
   ListItemText,
@@ -134,7 +134,12 @@ export default function Search() {
               <List disablePadding>
                 {users.map((user, index) => (
                   <Box key={user.userId || index}>
-                    <ListItem alignItems="flex-start" sx={{ px: 0 }}>
+                    <ListItemButton
+                      alignItems="flex-start"
+                      sx={{ px: 0 }}
+                      disabled={!user.userId}
+                      onClick={() => navigate(`/users/${user.userId}`)}
+                    >
                       <ListItemAvatar>
                         <Avatar
                           src={user.avatar}
@@ -166,7 +171,7 @@ export default function Search() {
                           </Box>
                         }
                       />
-                    </ListItem>
+                    </ListItemButton>
                     {index < users.length - 1 && <Divider component="li" />}
                   </Box>
                 ))}
@@ -186,7 +191,12 @@ export default function Search() {
               <List disablePadding>
                 {posts.map((post, index) => (
                   <Box key={post.postId || index}>
-                    <ListItem alignItems="flex-start" sx={{ px: 0 }}>
+                    <ListItemButton
+                      alignItems="flex-start"
+                      sx={{ px: 0 }}
+                      disabled={!post.userId}
+                      onClick={() => navigate(`/users/${post.userId}`)}
+                    >
                       <ListItemAvatar>
                         <Avatar sx={{ bgcolor: "primary.main" }}>
                           <ArticleIcon />
@@ -218,7 +228,7 @@ export default function Search() {
                           </Typography>
                         }
                       />
-                    </ListItem>
+                    </ListItemButton>
                     {index < posts.length - 1 && <Divider component="li" />}
                   </Box>
                 ))}

@@ -11,6 +11,8 @@ public enum ErrorCode {
     UNAUTHENTICATED(1006, "Unauthenticated", HttpStatus.UNAUTHORIZED),
     UNAUTHORIZED(1007, "You do not have permission", HttpStatus.FORBIDDEN),
     FILE_NOT_FOUND(1008, "File not found", HttpStatus.NOT_FOUND),
+    INVALID_FILE_TYPE(1009, "Only JPEG, PNG, GIF and WebP images are allowed", HttpStatus.BAD_REQUEST),
+    EMPTY_FILE(1010, "File is empty", HttpStatus.BAD_REQUEST),
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

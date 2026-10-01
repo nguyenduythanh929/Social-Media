@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
 import java.time.Instant;
+import java.util.List;
 
 @Data
 @Builder
@@ -17,9 +18,16 @@ import java.time.Instant;
 public class PostResponse {
     String id;
     String content;
+    List<String> mediaUrls;
     String userId;
     String username;
+    String avatar;
     String created;
     Instant createdDate;
     Instant modifiedDate;
+    boolean edited;
+    long likeCount;
+    boolean likedByMe;
+    long commentCount;
+    boolean ownedByMe;
 }

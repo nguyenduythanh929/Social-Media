@@ -33,6 +33,8 @@ public class FileController {
 
         return ResponseEntity.<Resource>ok()
                 .header(HttpHeaders.CONTENT_TYPE, fileData.contentType())
+                // Stop browsers from guessing a different (e.g. HTML) type from the file's bytes
+                .header("X-Content-Type-Options", "nosniff")
                 .body(fileData.resource());
     }
 }

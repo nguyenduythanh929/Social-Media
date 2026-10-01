@@ -14,6 +14,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 
 import com.thanh.search.dto.event.PostCreatedEvent;
+import com.thanh.search.dto.event.PostDeletedEvent;
 import com.thanh.search.dto.event.ProfileUpdatedEvent;
 import com.thanh.search.dto.event.UserCreatedEvent;
 
@@ -85,6 +86,24 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, PostCreatedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(postCreatedConsumerFactory());
+        return factory;
+    }
+
+    // ---- PostDeletedEvent ----
+
+    @Bean
+    public ConsumerFactory<String, PostDeletedEvent> postDeletedConsumerFactory() {
+        JacksonJsonDeserializer<PostDeletedEvent> deserializer = new JacksonJsonDeserializer<>(PostDeletedEvent.class);
+        deserializer.setUseTypeHeaders(false);
+        deserializer.addTrustedPackages("*");
+        return new DefaultKafkaConsumerFactory<>(baseConsumerConfig(), new StringDeserializer(), deserializer);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, PostDeletedEvent> postDeletedKafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, PostDeletedEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(postDeletedConsumerFactory());
         return factory;
     }
 }

@@ -7,11 +7,14 @@ spring:
   application:
     name: post
   mongodb:
-    uri: mongodb://root:root@192.168.0.111:27017/post-service?authSource=admin
+    uri: mongodb://root:${MONGO_PASSWORD:root}@${INFRA_HOST:localhost}:27017/post-service?authSource=admin
   kafka:
-    bootstrap-servers: 192.168.0.111:9094
+    bootstrap-servers: ${INFRA_HOST:localhost}:9094
 
 app:
   services:
     profile:
       url: http://localhost:8089/profile
+  file:
+    # Must match file-service's download-prefix: only images uploaded there may be attached to posts
+    download-prefix: ${FILE_DOWNLOAD_PREFIX:http://localhost:8888/api/v1/file/media/download/}

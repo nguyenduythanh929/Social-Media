@@ -7,7 +7,7 @@ spring:
   application:
     name: file-service
   mongodb:
-    uri: mongodb://root:root@192.168.0.111:27017/file-service?authSource=admin
+    uri: mongodb://root:${MONGO_PASSWORD:root}@${INFRA_HOST:localhost}:27017/file-service?authSource=admin
   servlet:
     multipart:
       max-file-size: 5MB
@@ -15,5 +15,5 @@ spring:
 
 app:
   file:
-    storage-dir: D:/Microservice/social-media/upload
-    download-prefix: http://localhost:8888/api/v1/file/media/download/
+    storage-dir: ${FILE_STORAGE_DIR:./upload}
+    download-prefix: ${FILE_DOWNLOAD_PREFIX:http://localhost:8888/api/v1/file/media/download/}

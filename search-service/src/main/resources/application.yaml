@@ -8,13 +8,13 @@ spring:
     name: search-service
 
   elasticsearch:
-    Uris: http://192.168.0.111:9200
+    Uris: http://${INFRA_HOST:localhost}:9200
 
   kafka:
-    bootstrap-servers: 192.168.0.111:9094
+    bootstrap-servers: ${INFRA_HOST:localhost}:9094
     consumer:
       group-id: search-group
       auto-offset-reset: earliest
 
 jwt:
-  signerKey: "1TjXchw5FloESb63Kc+DFhTARvpWL4jUGCwfGWxuG5SIf/1y/LgJxHnMqaF6A/ij"
+  signerKey: ${JWT_SIGNER_KEY}

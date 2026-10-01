@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-50 -50 100 100" width="512" height="512" role="img" aria-label="App logo">
+  <defs>
+    <!-- Each petal runs from the centre (y=0) to its tip (y=-46) -->
+    <linearGradient id="pinkToCyan" x1="0" y1="0" x2="0" y2="-46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e0147a"/>
+      <stop offset="0.55" stop-color="#8e5bd6"/>
+      <stop offset="1" stop-color="#1fd1e6"/>
+    </linearGradient>
+    <linearGradient id="cyanToPink" x1="0" y1="0" x2="0" y2="-46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#16b8e0"/>
+      <stop offset="0.6" stop-color="#6d7fe0"/>
+      <stop offset="1" stop-color="#f0288c"/>
+    </linearGradient>
+    <!-- Curved, asymmetric blade: gives the swirl -->
+    <path id="petal" d="M0,-5 C 13,-15 17,-33 6,-46 C 3,-31 -7,-19 0,-5 Z"/>
+  </defs>
+
+  <g transform="rotate(-10)">
+    <use href="#petal" fill="url(#pinkToCyan)" transform="rotate(0)"/>
+    <use href="#petal" fill="url(#cyanToPink)" transform="rotate(45) scale(0.82)"/>
+    <use href="#petal" fill="url(#pinkToCyan)" transform="rotate(90) scale(0.95)"/>
+    <use href="#petal" fill="url(#cyanToPink)" transform="rotate(135) scale(0.8)"/>
+    <use href="#petal" fill="url(#pinkToCyan)" transform="rotate(180) scale(1)"/>
+    <use href="#petal" fill="url(#cyanToPink)" transform="rotate(225) scale(0.84)"/>
+    <use href="#petal" fill="url(#pinkToCyan)" transform="rotate(270) scale(0.93)"/>
+    <use href="#petal" fill="url(#cyanToPink)" transform="rotate(315) scale(0.8)"/>
+  </g>
+  <circle r="4.2" fill="#ffffff"/>
+</svg>

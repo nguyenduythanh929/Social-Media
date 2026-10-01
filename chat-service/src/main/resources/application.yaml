@@ -6,7 +6,7 @@ spring:
   application:
     name: chat-service
   mongodb:
-    uri: mongodb://root:root@192.168.0.111:27017/chat-service?authSource=admin
+    uri: mongodb://root:${MONGO_PASSWORD:root}@${INFRA_HOST:localhost}:27017/chat-service?authSource=admin
     auto-index-creation: true
 
 app:

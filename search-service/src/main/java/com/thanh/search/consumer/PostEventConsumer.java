@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import com.thanh.search.document.PostDocument;
 import com.thanh.search.dto.event.PostCreatedEvent;
+import com.thanh.search.dto.event.PostDeletedEvent;
 import com.thanh.search.repository.PostSearchRepository;
 
 import lombok.AccessLevel;
@@ -20,9 +21,13 @@ public class PostEventConsumer {
 
     PostSearchRepository postSearchRepository;
 
-    @KafkaListener(topics = "post-created", groupId = "search-group", containerFactory = "postCreatedKafkaListenerContainerFactory")
+    // post-updated carries the same payload; saving by id overwrites the existing document (upsert)
+    @KafkaListener(
+            topics = {"post-created", "post-updated"},
+            groupId = "search-group",
+            containerFactory = "postCreatedKafkaListenerContainerFactory")
     public void handlePostCreated(PostCreatedEvent event) {
-        log.info("Received post-created event for postId: {}", event.getPostId());
+        log.info("Received post created/updated event for postId: {}", event.getPostId());
 
         PostDocument doc = PostDocument.builder()
                 .id(event.getPostId())
@@ -34,5 +39,13 @@ public class PostEventConsumer {
 
         postSearchRepository.save(doc);
         log.info("Indexed post: {}", event.getPostId());
+    }
+
+    @KafkaListener(topics = "post-deleted", groupId = "search-group", containerFactory = "postDeletedKafkaListenerContainerFactory")
+    public void handlePostDeleted(PostDeletedEvent event) {
+        log.info("Received post-deleted event for postId: {}", event.getPostId());
+
+        postSearchRepository.deleteById(event.getPostId());
+        log.info("Removed post from index: {}", event.getPostId());
     }
 }
