@@ -1,9 +1,9 @@
 package com.thanh.identityservice.DTO.Response;
 
+import java.time.LocalDate;
+
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-
-import java.time.LocalDate;
 
 @Data
 @Builder

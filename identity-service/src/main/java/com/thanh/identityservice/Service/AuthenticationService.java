@@ -72,9 +72,7 @@ public class AuthenticationService {
 
         return IntrospectResponse.builder()
                 .valid(isValid)
-                .userId(Objects.nonNull(jwt) ?
-                jwt.getJWTClaimsSet().getSubject()
-                        : null)
+                .userId(Objects.nonNull(jwt) ? jwt.getJWTClaimsSet().getSubject() : null)
                 .build();
     }
 

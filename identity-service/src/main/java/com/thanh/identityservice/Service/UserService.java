@@ -1,5 +1,17 @@
 package com.thanh.identityservice.Service;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
 import com.thanh.event.dto.NotificationEvent;
 import com.thanh.identityservice.DTO.Request.UserCreationRequest;
 import com.thanh.identityservice.DTO.Request.UserUpdateRequest;
@@ -14,21 +26,11 @@ import com.thanh.identityservice.Repository.RoleRepository;
 import com.thanh.identityservice.Repository.UserRepository;
 import com.thanh.identityservice.Repository.httpclient.ProfileClient;
 import com.thanh.identityservice.constant.PredefinedRole;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -80,11 +82,13 @@ public class UserService {
         kafkaTemplate.send("notification-delivery", notificationEvent);
 
         // Publish user-created event for search indexing
-        kafkaTemplate.send("user-created", com.thanh.identityservice.dto.event.UserCreatedEvent.builder()
-                .userId(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .build());
+        kafkaTemplate.send(
+                "user-created",
+                com.thanh.identityservice.dto.event.UserCreatedEvent.builder()
+                        .userId(user.getId())
+                        .username(user.getUsername())
+                        .email(user.getEmail())
+                        .build());
 
         var userCreationReponse = userMapper.toUserResponse(user);
         userCreationReponse.setId(profile.getResult().getId());
@@ -129,5 +133,4 @@ public class UserService {
         return userMapper.toUserResponse(
                 userRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED)));
     }
-
 }

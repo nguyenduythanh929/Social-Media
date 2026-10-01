@@ -1,6 +1,5 @@
 package com.thanh.identityservice.DTO.Response;
 
-import java.time.LocalDate;
 import java.util.Set;
 
 import lombok.*;
