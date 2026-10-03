@@ -104,5 +104,20 @@ jobs:
         env:
           CI: false
 
+  docker:
+    name: Build Docker Image
+    needs: [backend, search-service, frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Create .env from template
+        run: cp .env.example .env
+
+      - name: Build all images
+        run: docker compose build
+
 
 
