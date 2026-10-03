@@ -1,9 +1,11 @@
 # Social Media App — Microservices Architecture
 
+[![CI](https://github.com/nguyenduythanh929/Social-Media/actions/workflows/ci.yml/badge.svg)](https://github.com/nguyenduythanh929/Social-Media/actions/workflows/ci.yml)
+
 A full-stack social media platform built with **Java Spring Boot** microservices and a **React** frontend.
 Users can sign up, follow each other, share posts with images, like and comment, chat in real time, and search people and posts.
 
-The whole stack — 8 services, the web app, and MySQL, MongoDB, Neo4j, Elasticsearch and Kafka — starts with **one Docker Compose command**.
+The whole stack — 8 services, the web app, and MySQL, MongoDB, Neo4j, Elasticsearch and Kafka — starts with **one Docker Compose command**, and every push is built and tested by a **GitHub Actions** pipeline.
 
 ---
 
@@ -243,14 +245,27 @@ You can run the infrastructure in Docker and the services from IntelliJ for debu
 
 ---
 
-## Testing
+## Testing & CI
+
+Every push and pull request to `main` runs the [CI pipeline](.github/workflows/ci.yml) on GitHub Actions:
+
+| Job | What it checks |
+|---|---|
+| **Build <service>** (7 jobs in parallel) | `mvn verify` — compile, run tests and generate the JaCoCo coverage report for api-gateway, identity, profile, post, file, chat and notification services |
+| **Build search-service** | Same, against a real **Elasticsearch 9.2.8** service container, because the service creates its indexes on startup |
+| **Build web-app** | `npm ci` and a production build of the React app |
+| **Build Docker images** | `docker compose build` for the whole stack — runs only after all jobs above pass |
+
+Tests run without any external infrastructure (except search-service's Elasticsearch): databases, other services and Kafka are mocked or replaced, and secrets are supplied as test-only properties.
+
+- **identity-service** — unit and web-layer tests: registration (success, duplicate user), `getMyInfo`, and request validation (username length, email format)
+- **Every service** — an application-context test that verifies the service starts with its configuration
+
+Run them locally from any service folder:
 
 ```bash
-cd identity-service
 mvn verify
 ```
-
-identity-service has unit and web-layer tests (service logic, request validation, context startup) that mock the database, profile-service and Kafka, so they run without any infrastructure. Spotless formats the code during the build.
 
 ---
 
@@ -266,6 +281,7 @@ identity-service has unit and web-layer tests (service logic, request validation
 | Frontend | React 18, React Router, Material UI, STOMP.js, Axios |
 | Build & quality | Maven, MapStruct, Lombok, Spotless, JaCoCo, JUnit 5, Mockito |
 | Infrastructure | Docker, Docker Compose, nginx |
+| CI | GitHub Actions (matrix builds, Maven/npm caching, Elasticsearch service container) |
 
 ---
 
@@ -282,6 +298,7 @@ social-media/
 ├── notification-service/   # Emails (Kafka consumer + Brevo)
 ├── search-service/         # Search (Elasticsearch + Kafka consumer)
 ├── web-app/                # React SPA + nginx config
+├── .github/workflows/      # CI pipeline (GitHub Actions)
 ├── docker-compose.yml      # Full stack: services + infrastructure
 └── .env.example            # Configuration template
 ```
